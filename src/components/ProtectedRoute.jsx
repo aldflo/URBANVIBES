@@ -4,6 +4,8 @@ import { onAuthStateChanged } from "firebase/auth";
 
 import { auth } from "../firebase";
 
+const ADMIN_EMAIL = "aldair.flores0604@gmail.com";
+
 function ProtectedRoute({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -22,21 +24,18 @@ function ProtectedRoute({ children }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-[calc(100vh-80px)] items-center justify-center">
-        <p className="text-zinc-500">
-          Cargando...
-        </p>
+      <div className="flex min-h-screen items-center justify-center">
+        Cargando...
       </div>
     );
   }
 
   if (!user) {
-    return (
-      <Navigate
-        to="/admin/login"
-        replace
-      />
-    );
+    return <Navigate to="/admin/login" replace />;
+  }
+
+  if (user.email !== ADMIN_EMAIL) {
+    return <Navigate to="/" replace />;
   }
 
   return children;
