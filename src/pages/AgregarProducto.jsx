@@ -13,6 +13,8 @@ import {
 
 import { db } from "../firebase";
 
+const MAX_IMAGENES = 6;
+
 function AgregarProducto() {
   const navigate = useNavigate();
 
@@ -27,8 +29,15 @@ function AgregarProducto() {
   const [precio, setPrecio] = useState("");
   const [descripcion, setDescripcion] = useState("");
 
-  const [imagen, setImagen] = useState(null);
-  const [preview, setPreview] = useState("");
+  // NUEVAS IMÁGENES SELECCIONADAS
+  const [imagenes, setImagenes] = useState([]);
+
+  // PREVIEWS DE ARCHIVOS NUEVOS
+  const [previews, setPreviews] = useState([]);
+
+  // IMÁGENES QUE YA EXISTEN EN FIRESTORE/CLOUDINARY
+  const [imagenesExistentes, setImagenesExistentes] =
+    useState([]);
 
   const [loading, setLoading] = useState(false);
   const [mensaje, setMensaje] = useState("");
@@ -48,7 +57,7 @@ function AgregarProducto() {
     useState(null);
 
   // =====================================
-  // FILTROS ADMINISTRADOR
+  // FILTROS ADMIN
   // =====================================
 
   const [seccionAdmin, setSeccionAdmin] =
@@ -93,24 +102,112 @@ function AgregarProducto() {
   }, []);
 
   // =====================================
-  // SELECCIONAR IMAGEN
+  // SELECCIONAR VARIAS IMÁGENES
   // =====================================
 
-  const seleccionarImagen = (e) => {
-    const archivo = e.target.files[0];
+  const seleccionarImagenes = (e) => {
+    const archivosSeleccionados = Array.from(
+      e.target.files
+    );
 
-    if (!archivo) return;
+    if (archivosSeleccionados.length === 0) {
+      return;
+    }
 
-    setImagen(archivo);
+    const cantidadActual =
+      imagenes.length +
+      previews.length -
+      imagenes.length +
+      imagenesExistentes.length;
 
-    const imagenTemporal =
-      URL.createObjectURL(archivo);
+    const espacioDisponible =
+      MAX_IMAGENES -
+      imagenesExistentes.length -
+      imagenes.length;
 
-    setPreview(imagenTemporal);
+    if (espacioDisponible <= 0) {
+      setError(
+        `Puedes subir máximo ${MAX_IMAGENES} imágenes por producto.`
+      );
+
+      e.target.value = "";
+      return;
+    }
+
+    const archivosPermitidos =
+      archivosSeleccionados.slice(
+        0,
+        espacioDisponible
+      );
+
+    if (
+      archivosSeleccionados.length >
+      espacioDisponible
+    ) {
+      setError(
+        `Solo se agregaron ${espacioDisponible} imágenes. El máximo es ${MAX_IMAGENES}.`
+      );
+    } else {
+      setError("");
+    }
+
+    const nuevasPreviews =
+      archivosPermitidos.map((archivo) => ({
+        archivo,
+        url: URL.createObjectURL(archivo),
+      }));
+
+    setImagenes((anteriores) => [
+      ...anteriores,
+      ...archivosPermitidos,
+    ]);
+
+    setPreviews((anteriores) => [
+      ...anteriores,
+      ...nuevasPreviews,
+    ]);
+
+    e.target.value = "";
   };
 
   // =====================================
-  // SUBIR IMAGEN A CLOUDINARY
+  // QUITAR IMAGEN NUEVA
+  // =====================================
+
+  const quitarImagenNueva = (indice) => {
+    setPreviews((anteriores) => {
+      const preview = anteriores[indice];
+
+      if (preview?.url) {
+        URL.revokeObjectURL(preview.url);
+      }
+
+      return anteriores.filter(
+        (_, i) => i !== indice
+      );
+    });
+
+    setImagenes((anteriores) =>
+      anteriores.filter(
+        (_, i) => i !== indice
+      )
+    );
+  };
+
+  // =====================================
+  // QUITAR IMAGEN EXISTENTE
+  // =====================================
+
+  const quitarImagenExistente = (indice) => {
+    setImagenesExistentes((anteriores) =>
+      anteriores.filter(
+        (_, i) => i !== indice
+      )
+    );
+  };
+
+  // =====================================
+  // SUBIR UNA IMAGEN A CLOUDINARY
   // =====================================
 
   const subirImagenCloudinary = async (
@@ -135,7 +232,7 @@ function AgregarProducto() {
 
     if (!response.ok) {
       throw new Error(
-        "No se pudo subir la imagen a Cloudinary"
+        "No se pudo subir una imagen a Cloudinary."
       );
     }
 
@@ -149,6 +246,12 @@ function AgregarProducto() {
   // =====================================
 
   const limpiarFormulario = () => {
+    previews.forEach((preview) => {
+      if (preview?.url) {
+        URL.revokeObjectURL(preview.url);
+      }
+    });
+
     setGenero("");
     setCategoria("");
 
@@ -156,8 +259,9 @@ function AgregarProducto() {
     setPrecio("");
     setDescripcion("");
 
-    setImagen(null);
-    setPreview("");
+    setImagenes([]);
+    setPreviews([]);
+    setImagenesExistentes([]);
 
     setProductoEditando(null);
   };
@@ -204,10 +308,26 @@ function AgregarProducto() {
       return;
     }
 
-    // Producto nuevo necesita imagen
-    if (!productoEditando && !imagen) {
+    // PRODUCTO NUEVO NECESITA AL MENOS UNA FOTO
+    if (
+      !productoEditando &&
+      imagenes.length === 0
+    ) {
       setError(
-        "Selecciona una imagen."
+        "Selecciona al menos una imagen."
+      );
+
+      return;
+    }
+
+    // EN EDICIÓN TAMPOCO DEJAMOS EL PRODUCTO SIN FOTOS
+    if (
+      productoEditando &&
+      imagenes.length === 0 &&
+      imagenesExistentes.length === 0
+    ) {
+      setError(
+        "El producto debe tener al menos una imagen."
       );
 
       return;
@@ -216,15 +336,38 @@ function AgregarProducto() {
     try {
       setLoading(true);
 
-      let imagenUrl = preview;
+      // =================================
+      // SUBIR TODAS LAS FOTOS NUEVAS
+      // =================================
 
-      // Si eligió una imagen nueva
-      if (imagen) {
-        imagenUrl =
-          await subirImagenCloudinary(
-            imagen
-          );
+      let nuevasUrls = [];
+
+      if (imagenes.length > 0) {
+        nuevasUrls = await Promise.all(
+          imagenes.map((archivo) =>
+            subirImagenCloudinary(archivo)
+          )
+        );
       }
+
+      // =================================
+      // COMBINAR EXISTENTES + NUEVAS
+      // =================================
+
+      const todasLasImagenes = [
+        ...imagenesExistentes,
+        ...nuevasUrls,
+      ];
+
+      if (todasLasImagenes.length === 0) {
+        throw new Error(
+          "El producto necesita al menos una imagen."
+        );
+      }
+
+      // La primera imagen siempre será la principal
+      const imagenPrincipal =
+        todasLasImagenes[0];
 
       const producto = {
         nombre: nombre.trim(),
@@ -238,7 +381,11 @@ function AgregarProducto() {
 
         categoria,
 
-        imagen: imagenUrl,
+        // Compatibilidad con tus páginas actuales
+        imagen: imagenPrincipal,
+
+        // Galería completa
+        imagenes: todasLasImagenes,
 
         activo: true,
       };
@@ -276,6 +423,7 @@ function AgregarProducto() {
             db,
             "productos"
           ),
+
           {
             ...producto,
 
@@ -303,6 +451,7 @@ function AgregarProducto() {
           "No se pudo guardar el producto"
         }`
       );
+
     } finally {
       setLoading(false);
     }
@@ -335,11 +484,29 @@ function AgregarProducto() {
       producto.descripcion || ""
     );
 
-    setPreview(
-      producto.imagen || ""
-    );
+    // Compatibilidad:
+    // productos viejos tienen "imagen"
+    // productos nuevos tienen "imagenes"
+    if (
+      Array.isArray(producto.imagenes) &&
+      producto.imagenes.length > 0
+    ) {
+      setImagenesExistentes(
+        producto.imagenes
+      );
+    } else if (producto.imagen) {
+      setImagenesExistentes([
+        producto.imagen,
+      ]);
+    } else {
+      setImagenesExistentes([]);
+    }
 
-    setImagen(null);
+    setImagenes([]);
+    setPreviews([]);
+
+    setMensaje("");
+    setError("");
 
     window.scrollTo({
       top: 0,
@@ -411,10 +578,7 @@ function AgregarProducto() {
 
       <div className="mx-auto max-w-6xl">
 
-        {/* =========================
-            CABECERA
-        ========================== */}
-
+        {/* CABECERA */}
         <div className="mb-8 flex items-center justify-between">
 
           <div>
@@ -445,19 +609,16 @@ function AgregarProducto() {
 
         </div>
 
-        {/* =========================
+        {/* =====================================
             FORMULARIO
-        ========================== */}
+        ====================================== */}
 
         <form
           onSubmit={handleSubmit}
           className="rounded-3xl bg-white p-6 shadow-sm md:p-10"
         >
 
-          {/* =========================
-              DAMA / CABALLEROS
-          ========================== */}
-
+          {/* DAMA / CABALLEROS */}
           <div>
 
             <label className="mb-3 block text-sm font-bold">
@@ -501,10 +662,7 @@ function AgregarProducto() {
 
           </div>
 
-          {/* =========================
-              CATEGORÍA
-          ========================== */}
-
+          {/* CATEGORÍA */}
           <div className="mt-7">
 
             <label className="mb-3 block text-sm font-bold">
@@ -549,10 +707,7 @@ function AgregarProducto() {
 
           </div>
 
-          {/* =========================
-              NOMBRE
-          ========================== */}
-
+          {/* NOMBRE */}
           <div className="mt-7">
 
             <label className="mb-2 block text-sm font-bold">
@@ -573,10 +728,7 @@ function AgregarProducto() {
 
           </div>
 
-          {/* =========================
-              PRECIO
-          ========================== */}
-
+          {/* PRECIO */}
           <div className="mt-7">
 
             <label className="mb-2 block text-sm font-bold">
@@ -607,10 +759,7 @@ function AgregarProducto() {
 
           </div>
 
-          {/* =========================
-              DESCRIPCIÓN
-          ========================== */}
-
+          {/* DESCRIPCIÓN */}
           <div className="mt-7">
 
             <label className="mb-2 block text-sm font-bold">
@@ -631,39 +780,50 @@ function AgregarProducto() {
 
           </div>
 
-          {/* =========================
-              IMAGEN
-          ========================== */}
+          {/* =====================================
+              IMÁGENES
+          ====================================== */}
 
           <div className="mt-7">
 
-            <label className="mb-2 block text-sm font-bold">
-              Imagen del producto
-            </label>
+            <div className="mb-3 flex items-center justify-between">
+
+              <label className="text-sm font-bold">
+                Fotos del producto
+              </label>
+
+              <span className="text-xs text-zinc-400">
+                {imagenesExistentes.length +
+                  imagenes.length}
+                /{MAX_IMAGENES}
+              </span>
+
+            </div>
 
             <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 transition hover:border-black">
 
-              <span className="text-3xl">
+              <span className="text-4xl">
                 📷
               </span>
 
-              <span className="mt-3 font-semibold">
+              <span className="mt-3 font-bold">
+                Seleccionar fotos
+              </span>
 
-                {productoEditando
-                  ? "Cambiar imagen"
-                  : "Seleccionar imagen"}
-
+              <span className="mt-1 text-center text-xs text-zinc-400">
+                Puedes seleccionar varias imágenes
               </span>
 
               <span className="mt-1 text-xs text-zinc-400">
-                JPG, PNG o WEBP
+                Máximo {MAX_IMAGENES} · JPG, PNG o WEBP
               </span>
 
               <input
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={
-                  seleccionarImagen
+                  seleccionarImagenes
                 }
                 className="hidden"
               />
@@ -672,25 +832,61 @@ function AgregarProducto() {
 
           </div>
 
-          {/* =========================
-              PREVIEW
-          ========================== */}
+          {/* =====================================
+              FOTOS EXISTENTES
+          ====================================== */}
 
-          {preview && (
+          {imagenesExistentes.length >
+            0 && (
 
-            <div className="mt-6">
+            <div className="mt-7">
 
               <p className="mb-3 text-sm font-bold">
-                Vista previa
+                Fotos actuales
               </p>
 
-              <div className="overflow-hidden rounded-2xl bg-zinc-100">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
 
-                <img
-                  src={preview}
-                  alt="Vista previa"
-                  className="h-[400px] w-full object-contain"
-                />
+                {imagenesExistentes.map(
+                  (url, indice) => (
+
+                    <div
+                      key={`${url}-${indice}`}
+                      className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100"
+                    >
+
+                      <img
+                        src={url}
+                        alt={`Foto ${
+                          indice + 1
+                        }`}
+                        className="aspect-square h-full w-full object-cover"
+                      />
+
+                      {indice === 0 && (
+
+                        <span className="absolute bottom-2 left-2 rounded-full bg-black px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+                          Principal
+                        </span>
+
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          quitarImagenExistente(
+                            indice
+                          )
+                        }
+                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/80 text-lg font-bold text-white transition hover:bg-red-600"
+                      >
+                        ×
+                      </button>
+
+                    </div>
+
+                  )
+                )}
 
               </div>
 
@@ -698,12 +894,71 @@ function AgregarProducto() {
 
           )}
 
-          {/* =========================
-              CLASIFICACIÓN
-          ========================== */}
+          {/* =====================================
+              NUEVAS FOTOS
+          ====================================== */}
 
-          {(genero ||
-            categoria) && (
+          {previews.length > 0 && (
+
+            <div className="mt-7">
+
+              <p className="mb-3 text-sm font-bold">
+                Nuevas fotos
+              </p>
+
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+
+                {previews.map(
+                  (preview, indice) => (
+
+                    <div
+                      key={preview.url}
+                      className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100"
+                    >
+
+                      <img
+                        src={preview.url}
+                        alt={`Nueva foto ${
+                          indice + 1
+                        }`}
+                        className="aspect-square h-full w-full object-cover"
+                      />
+
+                      {imagenesExistentes
+                        .length === 0 &&
+                        indice === 0 && (
+
+                          <span className="absolute bottom-2 left-2 rounded-full bg-black px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
+                            Principal
+                          </span>
+
+                        )}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          quitarImagenNueva(
+                            indice
+                          )
+                        }
+                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/80 text-lg font-bold text-white transition hover:bg-red-600"
+                      >
+                        ×
+                      </button>
+
+                    </div>
+
+                  )
+                )}
+
+              </div>
+
+            </div>
+
+          )}
+
+          {/* CLASIFICACIÓN */}
+          {(genero || categoria) && (
 
             <div className="mt-7 rounded-2xl bg-zinc-100 p-5">
 
@@ -725,10 +980,7 @@ function AgregarProducto() {
 
           )}
 
-          {/* =========================
-              ERROR
-          ========================== */}
-
+          {/* ERROR */}
           {error && (
 
             <div className="mt-6 rounded-xl bg-red-50 p-4 text-sm font-medium text-red-600">
@@ -737,10 +989,7 @@ function AgregarProducto() {
 
           )}
 
-          {/* =========================
-              MENSAJE ÉXITO
-          ========================== */}
-
+          {/* ÉXITO */}
           {mensaje && (
 
             <div className="mt-6 rounded-xl bg-green-50 p-4 text-sm font-medium text-green-700">
@@ -749,10 +998,7 @@ function AgregarProducto() {
 
           )}
 
-          {/* =========================
-              BOTONES
-          ========================== */}
-
+          {/* BOTONES */}
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
 
             <button
@@ -762,7 +1008,9 @@ function AgregarProducto() {
             >
 
               {loading
-                ? "Guardando..."
+                ? imagenes.length > 1
+                  ? "Subiendo fotos..."
+                  : "Guardando..."
                 : productoEditando
                 ? "Actualizar producto"
                 : "Guardar producto"}
@@ -793,8 +1041,6 @@ function AgregarProducto() {
 
         <section className="mt-16">
 
-          {/* TITULO */}
-
           <div className="mb-7">
 
             <p className="text-xs font-bold uppercase tracking-[0.25em] text-zinc-400">
@@ -807,10 +1053,7 @@ function AgregarProducto() {
 
           </div>
 
-          {/* =================================
-              DAMA / CABALLEROS
-          ================================= */}
-
+          {/* DAMA / CABALLEROS */}
           <div className="mb-6 flex flex-wrap gap-3">
 
             <button
@@ -857,10 +1100,7 @@ function AgregarProducto() {
 
           </div>
 
-          {/* =================================
-              CATEGORIAS
-          ================================= */}
-
+          {/* CATEGORÍAS */}
           <div className="mb-8">
 
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">
@@ -869,128 +1109,58 @@ function AgregarProducto() {
 
             <div className="flex flex-wrap gap-2">
 
-              {/* TODAS */}
+              {[
+                {
+                  id: "todas",
+                  titulo: "Todas",
+                },
+                {
+                  id: "playera",
+                  titulo: "Playeras",
+                },
+                {
+                  id: "pantalon",
+                  titulo: "Pantalones",
+                },
+                {
+                  id: "calzado",
+                  titulo: "Calzado",
+                },
+                {
+                  id: "gorra",
+                  titulo: "Gorras",
+                },
+                {
+                  id: "otros",
+                  titulo: "Otros",
+                },
+              ].map((item) => (
 
-              <button
-                type="button"
-                onClick={() =>
-                  setCategoriaAdmin(
-                    "todas"
-                  )
-                }
-                className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-                  categoriaAdmin ===
-                  "todas"
-                    ? "bg-zinc-800 text-white"
-                    : "border border-zinc-300 bg-white text-zinc-600 hover:border-black hover:text-black"
-                }`}
-              >
-                Todas
-              </button>
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() =>
+                    setCategoriaAdmin(
+                      item.id
+                    )
+                  }
+                  className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+                    categoriaAdmin ===
+                    item.id
+                      ? "bg-zinc-800 text-white"
+                      : "border border-zinc-300 bg-white text-zinc-600 hover:border-black hover:text-black"
+                  }`}
+                >
+                  {item.titulo}
+                </button>
 
-              {/* PLAYERAS */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setCategoriaAdmin(
-                    "playera"
-                  )
-                }
-                className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-                  categoriaAdmin ===
-                  "playera"
-                    ? "bg-zinc-800 text-white"
-                    : "border border-zinc-300 bg-white text-zinc-600 hover:border-black hover:text-black"
-                }`}
-              >
-                Playeras
-              </button>
-
-              {/* PANTALONES */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setCategoriaAdmin(
-                    "pantalon"
-                  )
-                }
-                className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-                  categoriaAdmin ===
-                  "pantalon"
-                    ? "bg-zinc-800 text-white"
-                    : "border border-zinc-300 bg-white text-zinc-600 hover:border-black hover:text-black"
-                }`}
-              >
-                Pantalones
-              </button>
-
-              {/* CALZADO */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setCategoriaAdmin(
-                    "calzado"
-                  )
-                }
-                className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-                  categoriaAdmin ===
-                  "calzado"
-                    ? "bg-zinc-800 text-white"
-                    : "border border-zinc-300 bg-white text-zinc-600 hover:border-black hover:text-black"
-                }`}
-              >
-                Calzado
-              </button>
-
-              {/* GORRAS */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setCategoriaAdmin(
-                    "gorra"
-                  )
-                }
-                className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-                  categoriaAdmin ===
-                  "gorra"
-                    ? "bg-zinc-800 text-white"
-                    : "border border-zinc-300 bg-white text-zinc-600 hover:border-black hover:text-black"
-                }`}
-              >
-                Gorras
-              </button>
-
-              {/* OTROS */}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setCategoriaAdmin(
-                    "otros"
-                  )
-                }
-                className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-                  categoriaAdmin ===
-                  "otros"
-                    ? "bg-zinc-800 text-white"
-                    : "border border-zinc-300 bg-white text-zinc-600 hover:border-black hover:text-black"
-                }`}
-              >
-                Otros
-              </button>
+              ))}
 
             </div>
 
           </div>
 
-          {/* =================================
-              RESUMEN
-          ================================= */}
-
+          {/* RESUMEN */}
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 
             <div>
@@ -1028,10 +1198,7 @@ function AgregarProducto() {
 
           </div>
 
-          {/* =================================
-              SIN PRODUCTOS
-          ================================= */}
-
+          {/* SIN PRODUCTOS */}
           {productosAdmin.length ===
             0 && (
 
@@ -1042,140 +1209,152 @@ function AgregarProducto() {
               </h3>
 
               <p className="mt-2 text-sm text-zinc-500">
-                No existen productos
-                en esta categoría.
+                No existen productos en esta categoría.
               </p>
 
             </div>
 
           )}
 
-          {/* =================================
-              LISTADO
-          ================================= */}
-
+          {/* LISTADO */}
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
 
             {productosAdmin.map(
-              (producto) => (
+              (producto) => {
 
-              <article
-                key={producto.id}
-                className="overflow-hidden rounded-2xl bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"
-              >
+                const cantidadFotos =
+                  Array.isArray(
+                    producto.imagenes
+                  ) &&
+                  producto.imagenes
+                    .length > 0
+                    ? producto.imagenes
+                        .length
+                    : producto.imagen
+                    ? 1
+                    : 0;
 
-                {/* IMAGEN */}
+                return (
 
-                <div className="aspect-[4/3] overflow-hidden bg-zinc-100">
+                  <article
+                    key={producto.id}
+                    className="overflow-hidden rounded-2xl bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+                  >
 
-                  <img
-                    src={
-                      producto.imagen
-                    }
-                    alt={
-                      producto.nombre
-                    }
-                    className="h-full w-full object-cover"
-                  />
+                    {/* IMAGEN */}
+                    <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100">
 
-                </div>
+                      <img
+                        src={
+                          producto.imagen
+                        }
+                        alt={
+                          producto.nombre
+                        }
+                        className="h-full w-full object-cover"
+                      />
 
-                {/* INFO */}
+                      {cantidadFotos >
+                        1 && (
 
-                <div className="p-5">
+                        <span className="absolute right-3 top-3 rounded-full bg-black/80 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md">
+                          📷 {cantidadFotos}
+                        </span>
 
-                  {/* ETIQUETAS */}
+                      )}
 
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    </div>
 
-                    {/* CATEGORIA */}
+                    {/* INFO */}
+                    <div className="p-5">
 
-                    <span className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-600">
-                      {
-                        producto.categoria
-                      }
-                    </span>
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
 
-                    {/* GENERO */}
+                        <span className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-600">
+                          {
+                            producto.categoria
+                          }
+                        </span>
 
-                    <span className="rounded-full bg-black px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
+                        <span className="rounded-full bg-black px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
 
-                      {producto.genero ===
-                      "dama"
-                        ? "Dama"
-                        : "Caballeros"}
+                          {producto.genero ===
+                          "dama"
+                            ? "Dama"
+                            : "Caballeros"}
 
-                    </span>
+                        </span>
 
-                  </div>
+                      </div>
 
-                  {/* NOMBRE */}
+                      <h3 className="text-lg font-bold">
+                        {producto.nombre}
+                      </h3>
 
-                  <h3 className="text-lg font-bold">
-                    {producto.nombre}
-                  </h3>
+                      {producto.descripcion && (
 
-                  {/* DESCRIPCION */}
+                        <p className="mt-2 line-clamp-2 text-sm text-zinc-500">
+                          {
+                            producto.descripcion
+                          }
+                        </p>
 
-                  {producto.descripcion && (
+                      )}
 
-                    <p className="mt-2 line-clamp-2 text-sm text-zinc-500">
-                      {
-                        producto.descripcion
-                      }
-                    </p>
+                      <p className="mt-3 text-xl font-black">
 
-                  )}
+                        $
 
-                  {/* PRECIO */}
+                        {Number(
+                          producto.precio
+                        ).toLocaleString(
+                          "es-MX"
+                        )}
 
-                  <p className="mt-3 text-xl font-black">
+                      </p>
 
-                    $
+                      <p className="mt-1 text-xs text-zinc-400">
+                        {cantidadFotos}{" "}
+                        {cantidadFotos === 1
+                          ? "foto"
+                          : "fotos"}
+                      </p>
 
-                    {Number(
-                      producto.precio
-                    ).toLocaleString(
-                      "es-MX"
-                    )}
+                      <div className="mt-5 grid grid-cols-2 gap-3">
 
-                  </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            editarProducto(
+                              producto
+                            )
+                          }
+                          className="rounded-xl bg-black py-3 text-sm font-bold text-white transition hover:bg-zinc-800"
+                        >
+                          Editar
+                        </button>
 
-                  {/* BOTONES */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            eliminarProducto(
+                              producto
+                            )
+                          }
+                          className="rounded-xl border border-red-300 py-3 text-sm font-bold text-red-600 transition hover:bg-red-600 hover:text-white"
+                        >
+                          Eliminar
+                        </button>
 
-                  <div className="mt-5 grid grid-cols-2 gap-3">
+                      </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        editarProducto(
-                          producto
-                        )
-                      }
-                      className="rounded-xl bg-black py-3 text-sm font-bold text-white transition hover:bg-zinc-800"
-                    >
-                      Editar
-                    </button>
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        eliminarProducto(
-                          producto
-                        )
-                      }
-                      className="rounded-xl border border-red-300 py-3 text-sm font-bold text-red-600 transition hover:bg-red-600 hover:text-white"
-                    >
-                      Eliminar
-                    </button>
+                  </article>
 
-                  </div>
-
-                </div>
-
-              </article>
-
-            ))}
+                );
+              }
+            )}
 
           </div>
 
