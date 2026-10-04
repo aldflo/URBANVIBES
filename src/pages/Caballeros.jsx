@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+
 import {
   collection,
   onSnapshot,
@@ -114,13 +116,19 @@ function Caballeros() {
           <div className="mb-12 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
 
             <div>
-             
+              
+
+              <p className="mt-3 max-w-xl text-sm text-zinc-400">
+                Descubre nuestra colección para caballero.
+              </p>
             </div>
 
-            {/* BUSCADOR + CATEGORÍA */}
+            {/* BUSCADOR + VER DAMA + CATEGORÍA */}
             <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
 
+              {/* BUSCADOR */}
               <div className="relative w-full sm:w-72">
+
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400">
                   🔍
                 </span>
@@ -132,13 +140,24 @@ function Caballeros() {
                   placeholder="Buscar producto..."
                   className="w-full rounded-full border border-white/10 bg-white/10 py-3 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-purple-500"
                 />
+
               </div>
 
+              {/* VER DAMA */}
+              <Link
+                to="/dama"
+                className="flex items-center justify-center whitespace-nowrap rounded-full border border-pink-500/40 bg-pink-500/10 px-6 py-3 text-sm font-bold text-pink-300 transition hover:bg-pink-500 hover:text-white"
+              >
+                Ver Dama
+              </Link>
+
+              {/* CATEGORÍAS */}
               <select
                 value={categoria}
                 onChange={(e) => setCategoria(e.target.value)}
                 className="rounded-full border border-white/10 bg-zinc-900 px-5 py-3 text-sm font-medium text-white outline-none transition focus:border-purple-500"
               >
+
                 <option value="todas">
                   Todas las categorías
                 </option>
@@ -162,9 +181,11 @@ function Caballeros() {
                 <option value="otros">
                   Otros
                 </option>
+
               </select>
 
             </div>
+
           </div>
 
           {/* ERROR */}
@@ -218,6 +239,7 @@ function Caballeros() {
                   <div className="mb-6 flex items-end justify-between border-b border-white/10 pb-4">
 
                     <div>
+
                       <p className="text-xs font-bold uppercase tracking-[0.25em] text-blue-400">
                         URBAN
                       </p>
@@ -225,6 +247,7 @@ function Caballeros() {
                       <h2 className="mt-1 text-2xl font-black">
                         {grupo.titulo}
                       </h2>
+
                     </div>
 
                     <span className="text-sm text-zinc-400">
@@ -254,11 +277,13 @@ function Caballeros() {
                           }
                           className="block aspect-[4/5] w-full cursor-zoom-in overflow-hidden bg-black"
                         >
+
                           <img
                             src={producto.imagen}
                             alt={producto.nombre}
                             className="h-full w-full object-cover transition duration-500 hover:scale-105"
                           />
+
                         </button>
 
                         {/* INFO */}
@@ -285,16 +310,12 @@ function Caballeros() {
                             ).toLocaleString("es-MX")}
                           </p>
 
-                          <button
-                            type="button"
-                            className="mt-5 w-full rounded-xl bg-white py-3 font-semibold text-black transition hover:bg-zinc-200"
-                          >
-                            Agregar al carrito
-                          </button>
+                         
 
                         </div>
 
                       </article>
+
                     ))}
 
                   </div>
@@ -311,11 +332,13 @@ function Caballeros() {
 
       {/* MODAL IMAGEN */}
       {imagenAbierta && (
+
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 p-4 backdrop-blur-md"
           onClick={() => setImagenAbierta(null)}
         >
 
+          {/* CERRAR */}
           <button
             type="button"
             onClick={() => setImagenAbierta(null)}
