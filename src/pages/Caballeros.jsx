@@ -168,6 +168,16 @@ function Caballeros() {
 
   };
 
+  // =====================================
+  // DISPONIBILIDAD
+  // =====================================
+
+  const obtenerDisponibilidad = (producto) => {
+    return producto?.disponibilidad === "agotado"
+      ? "agotado"
+      : "disponible";
+  };
+
 
 
   const abrirProducto = (producto) => {

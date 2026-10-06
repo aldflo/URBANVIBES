@@ -170,6 +170,16 @@ function Dama() {
 
   };
 
+  // =====================================
+  // DISPONIBILIDAD
+  // =====================================
+
+  const obtenerDisponibilidad = (producto) => {
+    return producto?.disponibilidad === "agotado"
+      ? "agotado"
+      : "disponible";
+  };
+
 
 
   // =====================================
