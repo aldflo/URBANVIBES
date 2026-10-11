@@ -21,8 +21,8 @@ function Dama() {
   const [busqueda, setBusqueda] = useState("");
   const [categoria, setCategoria] = useState("todas");
 
-  const [mostrarTodosDisponibles, setMostrarTodosDisponibles] = useState({});
-  const [mostrarTodosAgotados, setMostrarTodosAgotados] = useState({});
+  const [verMasDisponibles, setVerMasDisponibles] = useState({});
+  const [verMasAgotados, setVerMasAgotados] = useState({});
 
   const categorias = [
     { id: "playera", titulo: "Playeras" },
@@ -283,7 +283,7 @@ function Dama() {
 
               <Link
                 to="/caballeros"
-                className="flex items-center justify-center whitespace-nowrap rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500 px-6 py-3 text-sm font-bold transition hover:text-white"
+                className="flex items-center justify-center whitespace-nowrap rounded-full border border-blue-500/40 bg-blue-500/10 px-6 py-3 text-sm font-bold text-blue-300 transition hover:bg-blue-500 hover:text-white"
               >
                 Ver Caballeros
               </Link>
@@ -353,13 +353,19 @@ function Dama() {
                     obtenerDisponibilidad(producto) === "agotado"
                 );
 
+              const mostrarTodosDisponibles =
+                verMasDisponibles[grupo.id] === true;
+
+              const mostrarTodosAgotados =
+                verMasAgotados[grupo.id] === true;
+
               const disponiblesVisibles =
-                mostrarTodosDisponibles[grupo.id]
+                mostrarTodosDisponibles
                   ? productosDisponibles
-                  : productosDisponibles.slice(0, 16);
+                  : productosDisponibles.slice(0, 12);
 
               const agotadosVisibles =
-                mostrarTodosAgotados[grupo.id]
+                mostrarTodosAgotados
                   ? productosAgotados
                   : productosAgotados.slice(0, 4);
 
@@ -388,6 +394,7 @@ function Dama() {
                     <div>
                       <div className="mb-5 flex items-center gap-3">
                         <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+
                         <h3 className="text-sm font-black uppercase tracking-[0.2em] text-green-400">
                           Disponibles
                         </h3>
@@ -406,21 +413,22 @@ function Dama() {
                         ))}
                       </div>
 
-                      {productosDisponibles.length > 16 && (
+                      {productosDisponibles.length > 12 && (
                         <div className="mt-8 flex justify-center">
                           <button
                             type="button"
                             onClick={() =>
-                              setMostrarTodosDisponibles((estado) => ({
+                              setVerMasDisponibles((estado) => ({
                                 ...estado,
-                                [grupo.id]: !estado[grupo.id],
+                                [grupo.id]:
+                                  !estado[grupo.id],
                               }))
                             }
                             className="rounded-full border border-green-500/30 bg-green-500/10 px-7 py-3 text-sm font-bold text-green-300 transition hover:bg-green-500 hover:text-white"
                           >
-                            {mostrarTodosDisponibles[grupo.id]
+                            {mostrarTodosDisponibles
                               ? "Ver menos"
-                              : `Ver más (${productosDisponibles.length - 16})`}
+                              : "Ver más"}
                           </button>
                         </div>
                       )}
@@ -466,16 +474,17 @@ function Dama() {
                           <button
                             type="button"
                             onClick={() =>
-                              setMostrarTodosAgotados((estado) => ({
+                              setVerMasAgotados((estado) => ({
                                 ...estado,
-                                [grupo.id]: !estado[grupo.id],
+                                [grupo.id]:
+                                  !estado[grupo.id],
                               }))
                             }
-                            className="rounded-full border border-red-500/30 bg-red-500/10 px-7 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500 hover:text-white"
+                            className="rounded-full border border-red-500/30 bg-red-500/10 px-7 py-3 text-sm font-bold text-red-300 transition hover:bg-red-600 hover:text-white"
                           >
-                            {mostrarTodosAgotados[grupo.id]
+                            {mostrarTodosAgotados
                               ? "Ver menos"
-                              : `Ver más (${productosAgotados.length - 4})`}
+                              : "Ver más"}
                           </button>
                         </div>
                       )}

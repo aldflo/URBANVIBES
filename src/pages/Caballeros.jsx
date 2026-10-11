@@ -21,8 +21,8 @@ function Caballeros() {
   const [busqueda, setBusqueda] = useState("");
   const [categoria, setCategoria] = useState("todas");
 
-  const [mostrarTodosDisponibles, setMostrarTodosDisponibles] = useState({});
-  const [mostrarTodosAgotados, setMostrarTodosAgotados] = useState({});
+  const [verMasDisponibles, setVerMasDisponibles] = useState({});
+  const [verMasAgotados, setVerMasAgotados] = useState({});
 
   const categorias = [
     { id: "playera", titulo: "Playeras" },
@@ -258,7 +258,6 @@ function Caballeros() {
     <>
       <main className="min-h-[calc(100vh-80px)] bg-gradient-to-b from-zinc-950 via-zinc-900 to-black text-white">
         <div className="mx-auto max-w-7xl px-6 py-10">
-
           <div className="mb-12 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="mt-3 max-w-xl text-sm text-zinc-400">
@@ -283,7 +282,7 @@ function Caballeros() {
 
               <Link
                 to="/dama"
-                className="flex items-center justify-center whitespace-nowrap rounded-full border border-pink-500/40 bg-pink-500/10 text-pink-300 hover:bg-pink-500 px-6 py-3 text-sm font-bold transition hover:text-white"
+                className="flex items-center justify-center whitespace-nowrap rounded-full border border-pink-500/40 bg-pink-500/10 px-6 py-3 text-sm font-bold text-pink-300 transition hover:bg-pink-500 hover:text-white"
               >
                 Ver Dama
               </Link>
@@ -353,13 +352,19 @@ function Caballeros() {
                     obtenerDisponibilidad(producto) === "agotado"
                 );
 
+              const mostrarTodosDisponibles =
+                verMasDisponibles[grupo.id] === true;
+
+              const mostrarTodosAgotados =
+                verMasAgotados[grupo.id] === true;
+
               const disponiblesVisibles =
-                mostrarTodosDisponibles[grupo.id]
+                mostrarTodosDisponibles
                   ? productosDisponibles
-                  : productosDisponibles.slice(0, 16);
+                  : productosDisponibles.slice(0, 12);
 
               const agotadosVisibles =
-                mostrarTodosAgotados[grupo.id]
+                mostrarTodosAgotados
                   ? productosAgotados
                   : productosAgotados.slice(0, 4);
 
@@ -388,6 +393,7 @@ function Caballeros() {
                     <div>
                       <div className="mb-5 flex items-center gap-3">
                         <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+
                         <h3 className="text-sm font-black uppercase tracking-[0.2em] text-green-400">
                           Disponibles
                         </h3>
@@ -406,21 +412,22 @@ function Caballeros() {
                         ))}
                       </div>
 
-                      {productosDisponibles.length > 16 && (
+                      {productosDisponibles.length > 12 && (
                         <div className="mt-8 flex justify-center">
                           <button
                             type="button"
                             onClick={() =>
-                              setMostrarTodosDisponibles((estado) => ({
+                              setVerMasDisponibles((estado) => ({
                                 ...estado,
-                                [grupo.id]: !estado[grupo.id],
+                                [grupo.id]:
+                                  !estado[grupo.id],
                               }))
                             }
                             className="rounded-full border border-green-500/30 bg-green-500/10 px-7 py-3 text-sm font-bold text-green-300 transition hover:bg-green-500 hover:text-white"
                           >
-                            {mostrarTodosDisponibles[grupo.id]
+                            {mostrarTodosDisponibles
                               ? "Ver menos"
-                              : `Ver más (${productosDisponibles.length - 16})`}
+                              : "Ver más"}
                           </button>
                         </div>
                       )}
@@ -466,16 +473,17 @@ function Caballeros() {
                           <button
                             type="button"
                             onClick={() =>
-                              setMostrarTodosAgotados((estado) => ({
+                              setVerMasAgotados((estado) => ({
                                 ...estado,
-                                [grupo.id]: !estado[grupo.id],
+                                [grupo.id]:
+                                  !estado[grupo.id],
                               }))
                             }
-                            className="rounded-full border border-red-500/30 bg-red-500/10 px-7 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500 hover:text-white"
+                            className="rounded-full border border-red-500/30 bg-red-500/10 px-7 py-3 text-sm font-bold text-red-300 transition hover:bg-red-600 hover:text-white"
                           >
-                            {mostrarTodosAgotados[grupo.id]
+                            {mostrarTodosAgotados
                               ? "Ver menos"
-                              : `Ver más (${productosAgotados.length - 4})`}
+                              : "Ver más"}
                           </button>
                         </div>
                       )}
