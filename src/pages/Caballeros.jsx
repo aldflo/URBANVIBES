@@ -21,6 +21,9 @@ function Caballeros() {
   const [busqueda, setBusqueda] = useState("");
   const [categoria, setCategoria] = useState("todas");
 
+  const [mostrarTodosDisponibles, setMostrarTodosDisponibles] = useState({});
+  const [mostrarTodosAgotados, setMostrarTodosAgotados] = useState({});
+
   const categorias = [
     { id: "playera", titulo: "Playeras" },
     { id: "pantalon", titulo: "Pantalones" },
@@ -350,6 +353,16 @@ function Caballeros() {
                     obtenerDisponibilidad(producto) === "agotado"
                 );
 
+              const disponiblesVisibles =
+                mostrarTodosDisponibles[grupo.id]
+                  ? productosDisponibles
+                  : productosDisponibles.slice(0, 16);
+
+              const agotadosVisibles =
+                mostrarTodosAgotados[grupo.id]
+                  ? productosAgotados
+                  : productosAgotados.slice(0, 4);
+
               return (
                 <section key={grupo.id}>
                   <div className="mb-6 flex items-end justify-between border-b border-white/10 pb-4">
@@ -385,13 +398,32 @@ function Caballeros() {
                       </div>
 
                       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {productosDisponibles.map((producto) => (
+                        {disponiblesVisibles.map((producto) => (
                           <TarjetaProducto
                             key={producto.id}
                             producto={producto}
                           />
                         ))}
                       </div>
+
+                      {productosDisponibles.length > 16 && (
+                        <div className="mt-8 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMostrarTodosDisponibles((estado) => ({
+                                ...estado,
+                                [grupo.id]: !estado[grupo.id],
+                              }))
+                            }
+                            className="rounded-full border border-green-500/30 bg-green-500/10 px-7 py-3 text-sm font-bold text-green-300 transition hover:bg-green-500 hover:text-white"
+                          >
+                            {mostrarTodosDisponibles[grupo.id]
+                              ? "Ver menos"
+                              : `Ver más (${productosDisponibles.length - 16})`}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -420,7 +452,7 @@ function Caballeros() {
                       </p>
 
                       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                        {productosAgotados.map((producto) => (
+                        {agotadosVisibles.map((producto) => (
                           <TarjetaProducto
                             key={producto.id}
                             producto={producto}
@@ -428,6 +460,25 @@ function Caballeros() {
                           />
                         ))}
                       </div>
+
+                      {productosAgotados.length > 4 && (
+                        <div className="mt-8 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMostrarTodosAgotados((estado) => ({
+                                ...estado,
+                                [grupo.id]: !estado[grupo.id],
+                              }))
+                            }
+                            className="rounded-full border border-red-500/30 bg-red-500/10 px-7 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500 hover:text-white"
+                          >
+                            {mostrarTodosAgotados[grupo.id]
+                              ? "Ver menos"
+                              : `Ver más (${productosAgotados.length - 4})`}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </section>
