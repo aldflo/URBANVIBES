@@ -1,473 +1,1074 @@
 import { useEffect, useState } from "react";
+
 import { useNavigate } from "react-router-dom";
+
 import {
+
   addDoc,
+
   collection,
+
   deleteDoc,
+
   doc,
+
   onSnapshot,
+
   serverTimestamp,
+
   updateDoc,
+
 } from "firebase/firestore";
+
 import { db } from "../firebase";
+
+
 
 const MAX_IMAGENES = 6;
 
+
+
 function AgregarProducto() {
+
   const navigate = useNavigate();
 
+
+
   const [genero, setGenero] = useState("");
+
   const [categoria, setCategoria] = useState("");
+
   const [nombre, setNombre] = useState("");
+
   const [precio, setPrecio] = useState("");
+
   const [descripcion, setDescripcion] = useState("");
+
   const [disponibilidad, setDisponibilidad] = useState("disponible");
 
+
+
   const [imagenes, setImagenes] = useState([]);
+
   const [previews, setPreviews] = useState([]);
+
   const [imagenesExistentes, setImagenesExistentes] = useState([]);
 
+
+
   const [loading, setLoading] = useState(false);
+
   const [mensaje, setMensaje] = useState("");
+
   const [error, setError] = useState("");
 
+
+
   const [productos, setProductos] = useState([]);
+
   const [productoEditando, setProductoEditando] = useState(null);
 
+
+
   const [seccionAdmin, setSeccionAdmin] = useState("dama");
+
   const [categoriaAdmin, setCategoriaAdmin] = useState("todas");
 
+
+
   useEffect(() => {
+
     const unsubscribe = onSnapshot(
+
       collection(db, "productos"),
+
       (snapshot) => {
+
         const lista = snapshot.docs.map((documento) => ({
+
           id: documento.id,
+
           ...documento.data(),
+
         }));
+
         setProductos(lista);
+
       },
+
       (err) => {
+
         console.error("Error leyendo productos:", err);
+
         setError("No se pudieron cargar los productos.");
+
       }
+
     );
+
     return () => unsubscribe();
+
   }, []);
 
+
+
   const seleccionarImagenes = (e) => {
+
     const archivosSeleccionados = Array.from(e.target.files || []);
+
     if (archivosSeleccionados.length === 0) return;
 
+
+
     const espacioDisponible =
+
       MAX_IMAGENES - imagenesExistentes.length - imagenes.length;
 
+
+
     if (espacioDisponible <= 0) {
+
       setError(`Puedes subir máximo ${MAX_IMAGENES} imágenes por producto.`);
+
       e.target.value = "";
+
       return;
+
     }
+
+
 
     const archivosPermitidos = archivosSeleccionados.slice(0, espacioDisponible);
 
+
+
     if (archivosSeleccionados.length > espacioDisponible) {
+
       setError(
+
         `Solo se agregaron ${espacioDisponible} imágenes. El máximo es ${MAX_IMAGENES}.`
+
       );
+
     } else {
+
       setError("");
+
     }
+
+
 
     const nuevasPreviews = archivosPermitidos.map((archivo) => ({
+
       archivo,
+
       url: URL.createObjectURL(archivo),
+
     }));
 
+
+
     setImagenes((anteriores) => [...anteriores, ...archivosPermitidos]);
+
     setPreviews((anteriores) => [...anteriores, ...nuevasPreviews]);
+
     e.target.value = "";
+
   };
+
+
 
   const quitarImagenNueva = (indice) => {
+
     setPreviews((anteriores) => {
+
       const preview = anteriores[indice];
+
       if (preview?.url) URL.revokeObjectURL(preview.url);
+
       return anteriores.filter((_, i) => i !== indice);
+
     });
+
+
 
     setImagenes((anteriores) => anteriores.filter((_, i) => i !== indice));
+
   };
+
+
 
   const quitarImagenExistente = (indice) => {
+
     setImagenesExistentes((anteriores) =>
+
       anteriores.filter((_, i) => i !== indice)
+
     );
+
   };
+
+
 
   const subirImagenCloudinary = async (archivo) => {
+
     const formData = new FormData();
+
     formData.append("file", archivo);
+
     formData.append("upload_preset", "URBANVIBES");
 
+
+
     const response = await fetch(
-      "https://api.cloudinary.com/v1_1/dxj4iczvk/image/upload",
+
+      "https\://api.cloudinary.com/v1_1/dxj4iczvk/image/upload",
+
       { method: "POST", body: formData }
+
     );
+
+
 
     if (!response.ok) {
+
       throw new Error("No se pudo subir una imagen a Cloudinary.");
+
     }
+
+
 
     const data = await response.json();
+
     return data.secure_url;
+
   };
+
+
 
   const limpiarFormulario = () => {
+
     previews.forEach((preview) => {
+
       if (preview?.url) URL.revokeObjectURL(preview.url);
+
     });
 
+
+
     setGenero("");
+
     setCategoria("");
+
     setNombre("");
+
     setPrecio("");
+
     setDescripcion("");
+
     setDisponibilidad("disponible");
+
     setImagenes([]);
+
     setPreviews([]);
+
     setImagenesExistentes([]);
+
     setProductoEditando(null);
+
   };
+
+
 
   const handleSubmit = async (e) => {
+
     e.preventDefault();
+
     setMensaje("");
+
     setError("");
+
+
 
     if (!genero) return setError("Selecciona si el producto es para Dama o Caballeros.");
+
     if (!categoria) return setError("Selecciona una categoría.");
+
     if (!nombre.trim()) return setError("Escribe el nombre del producto.");
+
     if (precio === "" || Number(precio) < 0) return setError("Escribe un precio válido.");
 
+
+
     if (!productoEditando && imagenes.length === 0) {
+
       return setError("Selecciona al menos una imagen.");
+
     }
+
+
 
     if (
+
       productoEditando &&
+
       imagenes.length === 0 &&
+
       imagenesExistentes.length === 0
+
     ) {
+
       return setError("El producto debe tener al menos una imagen.");
+
     }
 
+
+
     try {
+
       setLoading(true);
 
+
+
       let nuevasUrls = [];
+
       if (imagenes.length > 0) {
+
         nuevasUrls = await Promise.all(
+
           imagenes.map((archivo) => subirImagenCloudinary(archivo))
+
         );
+
       }
+
+
 
       const todasLasImagenes = [...imagenesExistentes, ...nuevasUrls];
+
       if (todasLasImagenes.length === 0) {
+
         throw new Error("El producto necesita al menos una imagen.");
+
       }
+
+
 
       const producto = {
+
         nombre: nombre.trim(),
+
         precio: Number(precio),
+
         descripcion: descripcion.trim(),
+
         genero,
+
         categoria,
+
         disponibilidad,
+
         imagen: todasLasImagenes[0],
+
         imagenes: todasLasImagenes,
+
         activo: true,
+
       };
 
+
+
       if (productoEditando) {
+
         await updateDoc(doc(db, "productos", productoEditando.id), {
+
           ...producto,
+
           actualizado: serverTimestamp(),
+
         });
+
         setMensaje("Producto actualizado correctamente.");
+
       } else {
+
         await addDoc(collection(db, "productos"), {
+
           ...producto,
+
           creado: serverTimestamp(),
+
         });
+
         setMensaje("Producto guardado correctamente.");
+
       }
 
+
+
       limpiarFormulario();
+
     } catch (err) {
+
       console.error("Error guardando producto:", err);
+
       setError(`Error: ${err.message || "No se pudo guardar el producto"}`);
+
     } finally {
+
       setLoading(false);
+
     }
+
   };
+
+
 
   const editarProducto = (producto) => {
+
     setProductoEditando(producto);
+
     setGenero(producto.genero || "");
+
     setCategoria(producto.categoria || "");
+
     setNombre(producto.nombre || "");
+
     setPrecio(producto.precio ?? "");
+
     setDescripcion(producto.descripcion || "");
+
     setDisponibilidad(
+
       producto.disponibilidad === "agotado" ? "agotado" : "disponible"
+
     );
+
+
 
     if (Array.isArray(producto.imagenes) && producto.imagenes.length > 0) {
+
       setImagenesExistentes(producto.imagenes);
+
     } else if (producto.imagen) {
+
       setImagenesExistentes([producto.imagen]);
+
     } else {
+
       setImagenesExistentes([]);
+
     }
+
+
 
     setImagenes([]);
+
     setPreviews([]);
+
     setMensaje("");
+
     setError("");
+
     window.scrollTo({ top: 0, behavior: "smooth" });
+
   };
+
+
 
   const cambiarDisponibilidad = async (producto, nuevoEstado) => {
+
     try {
+
       await updateDoc(doc(db, "productos", producto.id), {
+
         disponibilidad: nuevoEstado,
+
         actualizado: serverTimestamp(),
+
       });
+
     } catch (err) {
+
       console.error("Error actualizando disponibilidad:", err);
+
       alert("No se pudo cambiar la disponibilidad.");
+
     }
+
   };
+
+
 
   const eliminarProducto = async (producto) => {
+
     const confirmar = window.confirm(
+
       `¿Seguro que quieres eliminar "${producto.nombre}"?`
+
     );
+
     if (!confirmar) return;
 
+
+
     try {
+
       await deleteDoc(doc(db, "productos", producto.id));
+
     } catch (err) {
+
       console.error("Error eliminando producto:", err);
+
       alert("No se pudo eliminar el producto.");
+
     }
+
   };
+
+
 
   const productosAdmin = productos.filter((producto) => {
     const coincideGenero = producto.genero === seccionAdmin;
+
     const coincideCategoria =
-      categoriaAdmin === "todas" || producto.categoria === categoriaAdmin;
+      categoriaAdmin === "todas" ||
+      producto.categoria === categoriaAdmin;
+
     return coincideGenero && coincideCategoria;
   });
 
-  return (
-    <main className="min-h-[calc(100vh-80px)] bg-zinc-100 px-4 py-10">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-400">Administrador</p>
-            <h1 className="mt-2 text-3xl font-black md:text-4xl">
-              {productoEditando ? "Editar producto" : "Agregar producto"}
-            </h1>
-          </div>
-          <button type="button" onClick={() => navigate("/admin")} className="rounded-full border border-zinc-300 bg-white px-5 py-2 text-sm font-semibold transition hover:bg-black hover:text-white">Volver</button>
+  const productosDisponiblesAdmin = productosAdmin.filter(
+    (producto) => producto.disponibilidad !== "agotado"
+  );
+
+  const productosAgotadosAdmin = productosAdmin.filter(
+    (producto) => producto.disponibilidad === "agotado"
+  );
+
+  const renderProductoAdmin = (producto) => {
+    const cantidadFotos =
+      Array.isArray(producto.imagenes) &&
+      producto.imagenes.length > 0
+        ? producto.imagenes.length
+        : producto.imagen
+        ? 1
+        : 0;
+
+    const estadoProducto =
+      producto.disponibilidad === "agotado"
+        ? "agotado"
+        : "disponible";
+
+    return (
+      <article
+        key={producto.id}
+        className={`overflow-hidden rounded-2xl bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg ${
+          estadoProducto === "agotado" ? "opacity-80" : ""
+        }`}
+      >
+        <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100">
+          <img
+            src={producto.imagen}
+            alt={producto.nombre}
+            className={`h-full w-full object-cover ${
+              estadoProducto === "agotado"
+                ? "grayscale-[20%]"
+                : ""
+            }`}
+          />
+
+          {cantidadFotos > 1 && (
+            <span className="absolute right-3 top-3 rounded-full bg-black/80 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md">
+              📷 {cantidadFotos}
+            </span>
+          )}
+
+          <span
+            className={`absolute left-3 top-3 rounded-full px-3 py-1.5 text-xs font-bold text-white ${
+              estadoProducto === "agotado"
+                ? "bg-red-600"
+                : "bg-green-600"
+            }`}
+          >
+            {estadoProducto === "agotado"
+              ? "Agotado"
+              : "Disponible"}
+          </span>
         </div>
 
-        <form onSubmit={handleSubmit} className="rounded-3xl bg-white p-6 shadow-sm md:p-10">
+        <div className="p-5">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-600">
+              {producto.categoria}
+            </span>
+
+            <span className="rounded-full bg-black px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
+              {producto.genero === "dama"
+                ? "Dama"
+                : "Caballeros"}
+            </span>
+          </div>
+
+          <h3 className="text-lg font-bold">
+            {producto.nombre}
+          </h3>
+
+          {producto.descripcion && (
+            <p className="mt-2 line-clamp-2 text-sm text-zinc-500">
+              {producto.descripcion}
+            </p>
+          )}
+
+          <p className="mt-3 text-xl font-black">
+            ${Number(producto.precio).toLocaleString("es-MX")}
+          </p>
+
+          <p className="mt-1 text-xs text-zinc-400">
+            {cantidadFotos}{" "}
+            {cantidadFotos === 1 ? "foto" : "fotos"}
+          </p>
+
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                cambiarDisponibilidad(
+                  producto,
+                  "disponible"
+                )
+              }
+              className={`rounded-xl border py-2.5 text-xs font-bold transition ${
+                estadoProducto === "disponible"
+                  ? "border-green-600 bg-green-600 text-white"
+                  : "border-green-300 text-green-700 hover:bg-green-50"
+              }`}
+            >
+              Disponible
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                cambiarDisponibilidad(
+                  producto,
+                  "agotado"
+                )
+              }
+              className={`rounded-xl border py-2.5 text-xs font-bold transition ${
+                estadoProducto === "agotado"
+                  ? "border-red-600 bg-red-600 text-white"
+                  : "border-red-300 text-red-600 hover:bg-red-50"
+              }`}
+            >
+              Agotado
+            </button>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => editarProducto(producto)}
+              className="rounded-xl bg-black py-3 text-sm font-bold text-white transition hover:bg-zinc-800"
+            >
+              Editar
+            </button>
+
+            <button
+              type="button"
+              onClick={() => eliminarProducto(producto)}
+              className="rounded-xl border border-red-300 py-3 text-sm font-bold text-red-600 transition hover:bg-red-600 hover:text-white"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
+  return (
+
+    <main className="min-h-[calc(100vh-80px)] bg-zinc-100 px-4 py-10">
+
+      <div className="mx-auto max-w-6xl">
+
+        <div className="mb-8 flex items-center justify-between">
+
           <div>
+
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-zinc-400">Administrador</p>
+
+            <h1 className="mt-2 text-3xl font-black md:text-4xl">
+
+              {productoEditando ? "Editar producto" : "Agregar producto"}
+
+            </h1>
+
+          </div>
+
+          <button type="button" onClick={() => navigate("/admin")} className="rounded-full border border-zinc-300 bg-white px-5 py-2 text-sm font-semibold transition hover:bg-black hover:text-white">Volver</button>
+
+        </div>
+
+
+
+        <form onSubmit={handleSubmit} className="rounded-3xl bg-white p-6 shadow-sm md:p-10">
+
+          <div>
+
             <label className="mb-3 block text-sm font-bold">¿Para quién es?</label>
+
             <div className="grid grid-cols-2 gap-3">
+
               <button type="button" onClick={() => setGenero("dama")} className={`rounded-2xl border px-5 py-5 font-bold transition ${genero === "dama" ? "border-black bg-black text-white" : "border-zinc-300 bg-white text-black hover:border-black"}`}>Dama</button>
+
               <button type="button" onClick={() => setGenero("caballeros")} className={`rounded-2xl border px-5 py-5 font-bold transition ${genero === "caballeros" ? "border-black bg-black text-white" : "border-zinc-300 bg-white text-black hover:border-black"}`}>Caballeros</button>
+
             </div>
+
           </div>
 
+
+
           <div className="mt-7">
+
             <label className="mb-3 block text-sm font-bold">Categoría</label>
+
             <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-4 outline-none transition focus:border-black">
+
               <option value="">Selecciona una categoría</option>
+
               <option value="playera">Playera</option>
+
               <option value="pantalon">Pantalón</option>
+
               <option value="calzado">Calzado</option>
+
               <option value="gorra">Gorra</option>
+
               <option value="otros">Otros</option>
+
             </select>
+
           </div>
 
+
+
           <div className="mt-7">
+
             <label className="mb-2 block text-sm font-bold">Nombre del producto</label>
+
             <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Playera Urban Oversize" className="w-full rounded-xl border border-zinc-300 px-4 py-4 outline-none transition focus:border-black" />
+
           </div>
 
+
+
           <div className="mt-7">
+
             <label className="mb-2 block text-sm font-bold">Precio</label>
+
             <div className="relative">
+
               <span className="absolute left-4 top-1/2 -translate-y-1/2 font-semibold text-zinc-500">$</span>
+
               <input type="number" min="0" step="0.01" value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="399" className="w-full rounded-xl border border-zinc-300 py-4 pl-9 pr-4 outline-none transition focus:border-black" />
+
             </div>
+
           </div>
 
+
+
           <div className="mt-7">
+
             <label className="mb-3 block text-sm font-bold">Estado del producto</label>
+
             <div className="grid grid-cols-2 gap-3">
+
               <button type="button" onClick={() => setDisponibilidad("disponible")} className={`rounded-2xl border px-5 py-4 font-bold transition ${disponibilidad === "disponible" ? "border-green-600 bg-green-600 text-white" : "border-zinc-300 bg-white text-black hover:border-green-600"}`}>Disponible</button>
+
               <button type="button" onClick={() => setDisponibilidad("agotado")} className={`rounded-2xl border px-5 py-4 font-bold transition ${disponibilidad === "agotado" ? "border-red-600 bg-red-600 text-white" : "border-zinc-300 bg-white text-black hover:border-red-600"}`}>Agotado</button>
+
             </div>
+
           </div>
 
+
+
           <div className="mt-7">
+
             <label className="mb-2 block text-sm font-bold">Descripción</label>
+
             <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Descripción del producto..." rows="5" className="w-full resize-none rounded-xl border border-zinc-300 px-4 py-4 outline-none transition focus:border-black" />
+
           </div>
 
+
+
           <div className="mt-7">
+
             <div className="mb-3 flex items-center justify-between">
+
               <label className="text-sm font-bold">Fotos del producto</label>
+
               <span className="text-xs text-zinc-400">{imagenesExistentes.length + imagenes.length}/{MAX_IMAGENES}</span>
+
             </div>
+
             <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 transition hover:border-black">
+
               <span className="text-4xl">📷</span>
+
               <span className="mt-3 font-bold">Seleccionar fotos</span>
+
               <span className="mt-1 text-center text-xs text-zinc-400">Puedes seleccionar varias imágenes</span>
+
               <span className="mt-1 text-xs text-zinc-400">Máximo {MAX_IMAGENES} · JPG, PNG o WEBP</span>
+
               <input type="file" accept="image/*" multiple onChange={seleccionarImagenes} className="hidden" />
+
             </label>
+
           </div>
+
+
 
           {imagenesExistentes.length > 0 && (
+
             <div className="mt-7">
+
               <p className="mb-3 text-sm font-bold">Fotos actuales</p>
+
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+
                 {imagenesExistentes.map((url, indice) => (
+
                   <div key={`${url}-${indice}`} className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100">
+
                     <img src={url} alt={`Foto ${indice + 1}`} className="aspect-square h-full w-full object-cover" />
+
                     {indice === 0 && <span className="absolute bottom-2 left-2 rounded-full bg-black px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">Principal</span>}
+
                     <button type="button" onClick={() => quitarImagenExistente(indice)} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/80 text-lg font-bold text-white transition hover:bg-red-600">×</button>
+
                   </div>
+
                 ))}
+
               </div>
+
             </div>
+
           )}
+
+
 
           {previews.length > 0 && (
+
             <div className="mt-7">
+
               <p className="mb-3 text-sm font-bold">Nuevas fotos</p>
+
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+
                 {previews.map((preview, indice) => (
+
                   <div key={preview.url} className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100">
+
                     <img src={preview.url} alt={`Nueva foto ${indice + 1}`} className="aspect-square h-full w-full object-cover" />
+
                     {imagenesExistentes.length === 0 && indice === 0 && <span className="absolute bottom-2 left-2 rounded-full bg-black px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white">Principal</span>}
+
                     <button type="button" onClick={() => quitarImagenNueva(indice)} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/80 text-lg font-bold text-white transition hover:bg-red-600">×</button>
+
                   </div>
+
                 ))}
+
               </div>
+
             </div>
+
           )}
+
+
 
           {(genero || categoria) && (
+
             <div className="mt-7 rounded-2xl bg-zinc-100 p-5">
+
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Clasificación</p>
+
               <p className="mt-2 font-bold capitalize">{genero || "Sin seleccionar"}{categoria && ` / ${categoria}`}</p>
+
               <p className="mt-2 text-sm">Estado: <span className={disponibilidad === "agotado" ? "font-bold text-red-600" : "font-bold text-green-600"}>{disponibilidad === "agotado" ? "Agotado" : "Disponible"}</span></p>
+
             </div>
+
           )}
 
+
+
           {error && <div className="mt-6 rounded-xl bg-red-50 p-4 text-sm font-medium text-red-600">{error}</div>}
+
           {mensaje && <div className="mt-6 rounded-xl bg-green-50 p-4 text-sm font-medium text-green-700">{mensaje}</div>}
 
+
+
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+
             <button type="submit" disabled={loading} className="flex-1 rounded-xl bg-black py-4 font-bold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-400">{loading ? "Guardando..." : productoEditando ? "Actualizar producto" : "Guardar producto"}</button>
+
             {productoEditando && <button type="button" onClick={limpiarFormulario} className="rounded-xl border border-zinc-300 px-8 py-4 font-bold transition hover:bg-zinc-100">Cancelar</button>}
+
           </div>
+
         </form>
 
+
+
         <section className="mt-16">
+
           <div className="mb-7">
+
             <p className="text-xs font-bold uppercase tracking-[0.25em] text-zinc-400">Inventario</p>
+
             <h2 className="mt-2 text-3xl font-black">Administrar productos</h2>
+
           </div>
+
+
 
           <div className="mb-6 flex flex-wrap gap-3">
+
             <button type="button" onClick={() => { setSeccionAdmin("dama"); setCategoriaAdmin("todas"); }} className={`rounded-full px-7 py-3 text-sm font-bold transition ${seccionAdmin === "dama" ? "bg-black text-white" : "border border-zinc-300 bg-white text-black hover:border-black"}`}>Dama</button>
+
             <button type="button" onClick={() => { setSeccionAdmin("caballeros"); setCategoriaAdmin("todas"); }} className={`rounded-full px-7 py-3 text-sm font-bold transition ${seccionAdmin === "caballeros" ? "bg-black text-white" : "border border-zinc-300 bg-white text-black hover:border-black"}`}>Caballeros</button>
+
           </div>
+
+
 
           <div className="mb-8">
+
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">Categorías</p>
+
             <div className="flex flex-wrap gap-2">
+
               {[{id:"todas",titulo:"Todas"},{id:"playera",titulo:"Playeras"},{id:"pantalon",titulo:"Pantalones"},{id:"calzado",titulo:"Calzado"},{id:"gorra",titulo:"Gorras"},{id:"otros",titulo:"Otros"}].map((item) => (
+
                 <button key={item.id} type="button" onClick={() => setCategoriaAdmin(item.id)} className={`rounded-full px-5 py-2 text-sm font-semibold transition ${categoriaAdmin === item.id ? "bg-zinc-800 text-white" : "border border-zinc-300 bg-white text-zinc-600 hover:border-black hover:text-black"}`}>{item.titulo}</button>
+
               ))}
+
             </div>
+
           </div>
 
+
+
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+
             <div>
+
               <p className="font-bold">{seccionAdmin === "dama" ? "Dama" : "Caballeros"}</p>
+
               <p className="text-sm capitalize text-zinc-500">{categoriaAdmin === "todas" ? "Todas las categorías" : categoriaAdmin}</p>
+
             </div>
+
             <p className="text-sm text-zinc-500">{productosAdmin.length} {productosAdmin.length === 1 ? "producto" : "productos"}</p>
+
           </div>
+
+
 
           {productosAdmin.length === 0 && (
             <div className="rounded-2xl bg-white p-10 text-center">
-              <h3 className="font-bold">No hay productos</h3>
-              <p className="mt-2 text-sm text-zinc-500">No existen productos en esta categoría.</p>
+              <h3 className="font-bold">
+                No hay productos
+              </h3>
+
+              <p className="mt-2 text-sm text-zinc-500">
+                No existen productos en esta categoría.
+              </p>
             </div>
           )}
 
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {productosAdmin.map((producto) => {
-              const cantidadFotos = Array.isArray(producto.imagenes) && producto.imagenes.length > 0 ? producto.imagenes.length : producto.imagen ? 1 : 0;
-              const estadoProducto = producto.disponibilidad === "agotado" ? "agotado" : "disponible";
+          {productosDisponiblesAdmin.length > 0 && (
+            <div className="mb-12">
+              <div className="mb-5 flex items-center justify-between border-b border-green-200 pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="h-3 w-3 rounded-full bg-green-500" />
 
-              return (
-                <article key={producto.id} className="overflow-hidden rounded-2xl bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
-                  <div className="relative aspect-[4/3] overflow-hidden bg-zinc-100">
-                    <img src={producto.imagen} alt={producto.nombre} className="h-full w-full object-cover" />
-                    {cantidadFotos > 1 && <span className="absolute right-3 top-3 rounded-full bg-black/80 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-md">📷 {cantidadFotos}</span>}
-                    <span className={`absolute left-3 top-3 rounded-full px-3 py-1.5 text-xs font-bold text-white ${estadoProducto === "agotado" ? "bg-red-600" : "bg-green-600"}`}>{estadoProducto === "agotado" ? "Agotado" : "Disponible"}</span>
+                  <div>
+                    <h3 className="text-lg font-black text-green-700">
+                      Disponibles
+                    </h3>
+
+                    <p className="text-xs text-zinc-500">
+                      Productos disponibles para venta
+                    </p>
                   </div>
+                </div>
 
-                  <div className="p-5">
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-zinc-600">{producto.categoria}</span>
-                      <span className="rounded-full bg-black px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">{producto.genero === "dama" ? "Dama" : "Caballeros"}</span>
-                    </div>
+                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
+                  {productosDisponiblesAdmin.length}
+                </span>
+              </div>
 
-                    <h3 className="text-lg font-bold">{producto.nombre}</h3>
-                    {producto.descripcion && <p className="mt-2 line-clamp-2 text-sm text-zinc-500">{producto.descripcion}</p>}
-                    <p className="mt-3 text-xl font-black">${Number(producto.precio).toLocaleString("es-MX")}</p>
-                    <p className="mt-1 text-xs text-zinc-400">{cantidadFotos} {cantidadFotos === 1 ? "foto" : "fotos"}</p>
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {productosDisponiblesAdmin.map((producto) =>
+                  renderProductoAdmin(producto)
+                )}
+              </div>
+            </div>
+          )}
 
-                    <div className="mt-5 grid grid-cols-2 gap-2">
-                      <button type="button" onClick={() => cambiarDisponibilidad(producto, "disponible")} className={`rounded-xl border py-2.5 text-xs font-bold transition ${estadoProducto === "disponible" ? "border-green-600 bg-green-600 text-white" : "border-green-300 text-green-700 hover:bg-green-50"}`}>Disponible</button>
-                      <button type="button" onClick={() => cambiarDisponibilidad(producto, "agotado")} className={`rounded-xl border py-2.5 text-xs font-bold transition ${estadoProducto === "agotado" ? "border-red-600 bg-red-600 text-white" : "border-red-300 text-red-600 hover:bg-red-50"}`}>Agotado</button>
-                    </div>
+          {productosAgotadosAdmin.length > 0 && (
+            <div className="rounded-3xl border border-red-100 bg-red-50/50 p-5 md:p-7">
+              <div className="mb-5 flex items-center justify-between border-b border-red-200 pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="h-3 w-3 rounded-full bg-red-500" />
 
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <button type="button" onClick={() => editarProducto(producto)} className="rounded-xl bg-black py-3 text-sm font-bold text-white transition hover:bg-zinc-800">Editar</button>
-                      <button type="button" onClick={() => eliminarProducto(producto)} className="rounded-xl border border-red-300 py-3 text-sm font-bold text-red-600 transition hover:bg-red-600 hover:text-white">Eliminar</button>
-                    </div>
+                  <div>
+                    <h3 className="text-lg font-black text-red-700">
+                      Productos agotados
+                    </h3>
+
+                    <p className="text-xs text-zinc-500">
+                      No disponibles por el momento
+                    </p>
                   </div>
-                </article>
-              );
-            })}
-          </div>
+                </div>
+
+                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
+                  {productosAgotadosAdmin.length}
+                </span>
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {productosAgotadosAdmin.map((producto) =>
+                  renderProductoAdmin(producto)
+                )}
+              </div>
+            </div>
+          )}
+
         </section>
+
       </div>
+
     </main>
+
   );
+
 }
 
+
+
 export default AgregarProducto;
+
+
